@@ -64,6 +64,7 @@ int main(void)
   /* Space for your local variables, callback registration ...*/
 
   	  //type your code here:
+  USART2_RegisterCallback(proccesDmaData);
   uint16_t status_ticks = 0;
   int len;
 

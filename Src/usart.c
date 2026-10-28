@@ -38,6 +38,8 @@ void USART2_RegisterCallback(void *callback)
 /* Space for global variables, if you need them */
 
 	// type global variables here
+/* Index in bufferUSART2dma up to which data were already passed to callback */
+static uint16_t old_pos = 0;
 
 
 /* USART2 init function */
@@ -150,7 +152,33 @@ void USART2_PutBuffer(uint8_t *buffer, uint8_t length)
  */
 void USART2_CheckDmaReception(void)
 {
-	//type your implementation here
+	if(USART2_ProcessData == 0) return;
+
+	uint16_t pos = DMA_USART2_BUFFER_SIZE - LL_DMA_GetDataLength(DMA1, LL_DMA_CHANNEL_6);
+
+	/* Next message (max. DMA_USART2_MAX_RX_BURST chars) may not fit -> buffer will be reset.
+	 * Channel is stopped first, so no byte can be written between reading position and reset. */
+	uint8_t reset = (DMA_USART2_BUFFER_SIZE - pos) <= DMA_USART2_MAX_RX_BURST;
+	if(reset)
+	{
+		LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_6);
+		pos = DMA_USART2_BUFFER_SIZE - LL_DMA_GetDataLength(DMA1, LL_DMA_CHANNEL_6);
+	}
+
+	/* Forward new data to callback, char by char */
+	for(uint16_t i = old_pos; i < pos; i++)
+	{
+		USART2_ProcessData(bufferUSART2dma[i]);
+	}
+	old_pos = pos;
+
+	if(reset)
+	{
+		/* Normal mode - DMA starts writing from the beginning of buffer after re-enable */
+		LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_6, DMA_USART2_BUFFER_SIZE);
+		LL_DMA_EnableChannel(DMA1, LL_DMA_CHANNEL_6);
+		old_pos = 0;
+	}
 }
 
 
