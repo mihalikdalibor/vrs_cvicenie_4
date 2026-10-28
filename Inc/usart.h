@@ -31,7 +31,9 @@
 /* USER CODE END Includes */
 
 /* USER CODE BEGIN Private defines */
-#define DMA_USART2_BUFFER_SIZE 64
+#define DMA_USART2_BUFFER_SIZE 128
+/* Max. number of chars sent by the PC at once */
+#define DMA_USART2_MAX_RX_BURST 20
 
 /* USER CODE END Private defines */
 
