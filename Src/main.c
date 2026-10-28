@@ -23,6 +23,7 @@
 #include "dma.h"
 #include "usart.h"
 #include "gpio.h"
+#include <stdio.h>
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -39,6 +40,9 @@ void proccesDmaData(uint8_t sign);
 /* Space for your global variables. */
 
 	// type your global variables here:
+#define STATUS_PERIOD_TICKS	200		/* 200 x 10 ms = 2 s -> 0.5 Hz */
+
+char tx_buffer[128];					/* read by DMA during Tx - must not be local */
 
 
 int main(void)
@@ -60,6 +64,8 @@ int main(void)
   /* Space for your local variables, callback registration ...*/
 
   	  //type your code here:
+  uint16_t status_ticks = 0;
+  int len;
 
   while (1)
   {
@@ -76,6 +82,21 @@ int main(void)
 	   */
 
   	  	  	  //type your code here:
+	  LL_mDelay(10);
+	  status_ticks++;
+
+	  if(status_ticks >= STATUS_PERIOD_TICKS)
+	  {
+		  status_ticks = 0;
+		  uint16_t occupied = DMA_USART2_BUFFER_SIZE - LL_DMA_GetDataLength(DMA1, LL_DMA_CHANNEL_6);
+		  uint16_t load_x10 = occupied * 1000 / DMA_USART2_BUFFER_SIZE;	/* load in 0.1 % */
+
+		  while(LL_DMA_IsEnabledChannel(DMA1, LL_DMA_CHANNEL_7));		/* wait for previous Tx */
+		  len = snprintf(tx_buffer, sizeof(tx_buffer),
+				  "Buffer capacity: %d bytes, occupied memory: %d bytes, load [in %%]: %d.%d%%\r\n",
+				  DMA_USART2_BUFFER_SIZE, occupied, load_x10 / 10, load_x10 % 10);
+		  USART2_PutBuffer((uint8_t*)tx_buffer, len);
+	  }
   }
   /* USER CODE END 3 */
 }
