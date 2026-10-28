@@ -24,6 +24,7 @@
 #include "usart.h"
 #include "gpio.h"
 #include <stdio.h>
+#include <string.h>
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -41,7 +42,11 @@ void proccesDmaData(uint8_t sign);
 
 	// type your global variables here:
 #define STATUS_PERIOD_TICKS	200		/* 200 x 10 ms = 2 s -> 0.5 Hz */
+#define MAX_STRING_LEN		35		/* max. chars after '#' (including '$') */
 
+letter_count_ letter_count = {0};		/* result for the last valid string */
+char valid_string[MAX_STRING_LEN];		/* last valid string without '#' and '$' */
+volatile uint8_t valid_string_ready = 0;	/* set in proccesDmaData (interrupt), cleared in main */
 char tx_buffer[128];					/* read by DMA during Tx - must not be local */
 
 
@@ -98,6 +103,16 @@ int main(void)
 				  DMA_USART2_BUFFER_SIZE, occupied, load_x10 / 10, load_x10 % 10);
 		  USART2_PutBuffer((uint8_t*)tx_buffer, len);
 	  }
+
+	  if(valid_string_ready)
+	  {
+		  valid_string_ready = 0;
+		  while(LL_DMA_IsEnabledChannel(DMA1, LL_DMA_CHANNEL_7));		/* wait for previous Tx */
+		  len = snprintf(tx_buffer, sizeof(tx_buffer),
+				  "Valid string: %s, lower-case: %d, upper-case: %d\r\n",
+				  valid_string, letter_count.small_letter, letter_count.capital_letter);
+		  USART2_PutBuffer((uint8_t*)tx_buffer, len);
+	  }
   }
   /* USER CODE END 3 */
 }
@@ -142,6 +157,43 @@ void proccesDmaData(uint8_t sign)
 	/* Process received data */
 
 		// type your algorithm here:
+	static uint8_t receiving = 0;				/* 1 = start sign '#' was received */
+	static char string[MAX_STRING_LEN];			/* chars received after '#' */
+	static uint8_t count = 0;					/* number of chars in string */
+
+	if(sign == '#')
+	{
+		/* start of a new string (also restarts an unfinished one) */
+		receiving = 1;
+		count = 0;
+		return;
+	}
+
+	if(!receiving) return;						/* no start sign - ignore */
+
+	if(sign == '$')
+	{
+		letter_count.small_letter = 0;
+		letter_count.capital_letter = 0;
+		for(uint8_t i = 0; i < count; i++)
+		{
+			if(string[i] >= 'a' && string[i] <= 'z') letter_count.small_letter++;
+			else if(string[i] >= 'A' && string[i] <= 'Z') letter_count.capital_letter++;
+		}
+
+		string[count] = '\0';
+		memcpy(valid_string, string, count + 1);
+		valid_string_ready = 1;
+		receiving = 0;
+		return;
+	}
+
+	string[count++] = sign;
+	if(count >= MAX_STRING_LEN)
+	{
+		/* 35 chars without '$' - discard and wait for new '#' */
+		receiving = 0;
+	}
 }
 
 
